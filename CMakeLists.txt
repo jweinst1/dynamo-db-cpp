@@ -48,8 +48,6 @@ set(AWSSDK_LINK_LIBRARIES
 # Source files go here.
 set(DYANMO_CPP_SOURCE
     main.cpp
-    Logger.cpp
-    TableMonitor.cpp
 )
 
 # We must let the compiler know its OK to link or include from /usr/local
