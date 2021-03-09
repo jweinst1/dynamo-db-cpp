@@ -3,6 +3,7 @@
 #include <thread>
 #include <chrono>
 #include <mutex>
+#include <cstdlib>
 #include <aws/core/Aws.h>
 #include <aws/core/utils/Outcome.h> 
 #include <aws/dynamodb/DynamoDBClient.h>
@@ -29,9 +30,69 @@ struct ScopedAwsSDK {
 	Aws::SDKOptions opts;
 };
 
+class ScopedDynamoTable {
+public:
+	ScopedDynamoTable(const char* name, const char* keyName): _name(name),
+	                                                          _keyName(keyName) 
+	{
+		Aws::Client::ClientConfiguration clientConfig;
+		_client = Aws::MakeUnique<Aws::DynamoDB::DynamoDBClient>("Dynamo Alloc", clientConfig);
+		Aws::DynamoDB::Model::CreateTableRequest req;
+		Aws::DynamoDB::Model::AttributeDefinition hashKey;
+		haskKey.SetAttributeName(_keyName);
+		haskKey.SetAttributeType(Aws::DynamoDB::Model::ScalarAttributeType::S);
+		req.AddAttributeDefinitions(hashKey);
+
+		Aws::DynamoDB::Model::KeySchemaElement keyscelt;
+		keyscelt.WithAttributeName(_keyName).WithKeyType(Aws::DynamoDB::Model::KeyType::HASH);
+		req.AddKeySchema(keyscelt);
+
+		Aws::DynamoDB::Model::ProvisionedThroughput thruput;
+		thruput.WithReadCapacityUnits(5).WithWriteCapacityUnits(5);
+		req.SetProvisionedThroughput(thruput);
+
+		req.SetTableName(_name);
+
+		const Aws::DynamoDB::Model::CreateTableOutcome& result = _client->CreateTable(req);
+		if (result.IsSuccess()) {
+		    std::cout << "Table: '" << result.GetResult().GetTableDescription().GetTableName() <<
+		        "' created successfully" << std::endl;
+		    std::cout << "Waiting until table is ready....\n";
+		    std::this_thread::sleep_for(std::chrono::seconds(5));
+		} else {
+		    std::cerr << "Failed to create table: " << result.GetError().GetMessage();
+		    std::abort();
+		}
+
+	}
+
+	~ScopedDynamoTable() {
+		Aws::DynamoDB::Model::DeleteTableRequest dtr;
+		dtr.SetTableName(_name);
+
+		const Aws::DynamoDB::Model::DeleteTableOutcome& result = client->DeleteTable(dtr);
+		if (result.IsSuccess()) {
+		    std::cout << "Table \"" << result.GetResult().GetTableDescription().GetTableName() <<
+		        "\" has been deleted\n";
+		} else {
+		    std::cerr << "Failed to delete the table: " << result.GetError().GetMessage();
+		    std::abort();
+		}
+
+	}
+private:
+	Aws::String _name;
+	Aws::String _keyName;
+	Aws::UniquePtr<Aws::DynamoDB::DynamoDBClient> _client;
+};
+
+static const char* KEY_NAME = "eventID";
 
 int main(int argc, char const *argv[])
 {
 	ScopedAwsSDK sdkScoped;
+	{
+		ScopedDynamoTable table("practice", KEY_NAME);
+	}
 	return 0;
 }
