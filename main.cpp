@@ -15,6 +15,8 @@
 #include <aws/dynamodb/model/ProvisionedThroughput.h>
 #include <aws/dynamodb/model/ScalarAttributeType.h>
 #include <aws/dynamodb/model/DeleteTableRequest.h>
+#include <aws/dynamodb/model/ScanRequest.h>
+#include <aws/dynamodb/model/ScanResult.h>
 
 
 struct ScopedAwsSDK {
@@ -56,9 +58,12 @@ public:
 		const Aws::DynamoDB::Model::CreateTableOutcome& result = _client->CreateTable(req);
 		if (result.IsSuccess()) {
 		    std::cout << "Table: '" << result.GetResult().GetTableDescription().GetTableName() <<
-		        "' created successfully" << std::endl;
-		    std::cout << "Waiting until table is ready....\n";
-		    std::this_thread::sleep_for(std::chrono::seconds(5));
+		        "' created successfully\n";
+		    for (int i = 0; i < 10; ++i)
+		    {
+		    	std::cout << "Waiting until table is ready....\n";
+		        std::this_thread::sleep_for(std::chrono::seconds(1));
+		    }
 		} else {
 		    std::cerr << "Failed to create table: " << result.GetError().GetMessage();
 		    std::abort();
@@ -66,11 +71,50 @@ public:
 
 	}
 
+	bool putItem(const char* keyValue)
+	{
+		Aws::DynamoDB::Model::PutItemRequest pir;
+		pir.SetTableName(_name);
+
+		const Aws::String condExpression = "attribute_not_exists(" + _keyName + ")";
+		pir.SetConditionExpression(condExpression);
+
+		Aws::DynamoDB::Model::AttributeValue av;
+		av.SetS(keyValue);
+		pir.AddItem(keyName, av);
+
+		const auto result = _client->PutItem(pir);
+		if (!result.IsSuccess()) {
+		    return false;
+		}
+		return true;
+	}
+
+	bool printItems()
+	{
+		Aws::DynamoDB::Model::ScanRequest sreq;
+		sreq.SetTableName(_name);
+
+		const auto result = _client->Scan(sreq);
+		if (result.IsSuccess()) {
+			const auto scanItems = result.GetItems();
+			for (auto sit = scanItems.begin(); sit != scanItems.end(); ++sit)
+			{
+				std::cout << "{" << _keyName << " : " << sit[_keyName].GetS()
+				          << "}\n";
+			}
+			return true;
+		} else {
+			std::cerr << "Failed to perform scan on table " << _name;
+		}
+		return false;
+	}
+
 	~ScopedDynamoTable() {
 		Aws::DynamoDB::Model::DeleteTableRequest dtr;
 		dtr.SetTableName(_name);
 
-		const Aws::DynamoDB::Model::DeleteTableOutcome& result = client->DeleteTable(dtr);
+		const auto result = _client->DeleteTable(dtr);
 		if (result.IsSuccess()) {
 		    std::cout << "Table \"" << result.GetResult().GetTableDescription().GetTableName() <<
 		        "\" has been deleted\n";
