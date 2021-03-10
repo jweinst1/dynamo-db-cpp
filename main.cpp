@@ -41,8 +41,8 @@ public:
 		_client = Aws::MakeUnique<Aws::DynamoDB::DynamoDBClient>("Dynamo Alloc", clientConfig);
 		Aws::DynamoDB::Model::CreateTableRequest req;
 		Aws::DynamoDB::Model::AttributeDefinition hashKey;
-		haskKey.SetAttributeName(_keyName);
-		haskKey.SetAttributeType(Aws::DynamoDB::Model::ScalarAttributeType::S);
+		hashKey.SetAttributeName(_keyName);
+		hashKey.SetAttributeType(Aws::DynamoDB::Model::ScalarAttributeType::S);
 		req.AddAttributeDefinitions(hashKey);
 
 		Aws::DynamoDB::Model::KeySchemaElement keyscelt;
@@ -81,7 +81,7 @@ public:
 
 		Aws::DynamoDB::Model::AttributeValue av;
 		av.SetS(keyValue);
-		pir.AddItem(keyName, av);
+		pir.AddItem(_keyName, av);
 
 		const auto result = _client->PutItem(pir);
 		if (!result.IsSuccess()) {
@@ -97,10 +97,12 @@ public:
 
 		const auto result = _client->Scan(sreq);
 		if (result.IsSuccess()) {
-			const auto scanItems = result.GetItems();
+			const auto scanResult = result.GetResult();
+			std::cout << "Scanned a total of " << scanResult.GetScannedCount() << " items\n";
+			const auto scanItems = scanResult.GetItems();
 			for (auto sit = scanItems.begin(); sit != scanItems.end(); ++sit)
 			{
-				std::cout << "{" << _keyName << " : " << sit[_keyName].GetS()
+				std::cout << "{" << _keyName << " : " << sit->at(_keyName).GetS()
 				          << "}\n";
 			}
 			return true;
@@ -130,13 +132,17 @@ private:
 	Aws::UniquePtr<Aws::DynamoDB::DynamoDBClient> _client;
 };
 
-static const char* KEY_NAME = "eventID";
+static const char* KEY_NAME = "event";
 
 int main(int argc, char const *argv[])
 {
 	ScopedAwsSDK sdkScoped;
 	{
-		ScopedDynamoTable table("practice", KEY_NAME);
+		ScopedDynamoTable table("schedule", KEY_NAME);
+		table.putItem("morning");
+		table.putItem("lunch");
+		table.putItem("basketball");
+		table.printItems();
 	}
 	return 0;
 }
